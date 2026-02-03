@@ -1,0 +1,58 @@
+groups:
+  - name: youtube_proxy_alerts
+    interval: 30s
+    rules:
+      # 应用不可用告警
+      - alert: YouTubeProxyDown
+        expr: up{job="youtube_proxy"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "YouTube Proxy 服务不可用"
+          description: "YouTube Proxy 应用已离线超过 2 分钟"
+
+      # 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(ytdlp_request_errors_total[5m])
+            /
+            (rate(ytdlp_requests_total[5m]) + 1)
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "YouTube 流解析错误率过高"
+          description: "过去 5 分钟内错误率超过 10%"
+
+      # Redis 连接失败
+      - alert: RedisConnectionFailed
+        expr: redis_connected_clients == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 连接失败"
+          description: "无法连接到 Redis 缓存服务"
+
+      # 并发流过多
+      - alert: HighConcurrentStreams
+        expr: active_streams > 8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "并发流接近限制"
+          description: "当前并发流数: {{ $value }} / 10"
+
+      # 缓存命中率低
+      - alert: LowCacheHitRate
+        expr: cache_hit_rate < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "缓存命中率过低"
+          description: "过去 10 分钟缓存命中率: {{ $value }}"
