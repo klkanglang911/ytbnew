@@ -1,0 +1,199 @@
+version: '3.8'
+
+services:
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: ytb_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-password}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ytb_network
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 512M
+      reservations:
+        cpus: '0.25'
+        memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # FastAPI 应用
+  app:
+    build: .
+    container_name: ytb_app
+    ports:
+      - "8000:8000"
+      - "9000:9000"  # Prometheus 指标端口
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-password}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DEBUG=${DEBUG:-false}
+      - CACHE_TTL=${CACHE_TTL:-21600}
+      - YTDLP_TIMEOUT=${YTDLP_TIMEOUT:-30}
+      - YTDLP_MAX_RETRIES=${YTDLP_MAX_RETRIES:-3}
+      - MAX_CONCURRENT_STREAMS=${MAX_CONCURRENT_STREAMS:-10}
+      - MAX_CONCURRENT_YTDLP_REQUESTS=${MAX_CONCURRENT_YTDLP_REQUESTS:-3}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - app_logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - ytb_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    resources:
+      limits:
+        cpus: '1'
+        memory: 1G
+      reservations:
+        cpus: '0.5'
+        memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Prometheus 监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ytb_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerting-rules.yml:/etc/prometheus/alerting-rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'  # 保留 30 天的数据
+      - '--web.enable-lifecycle'
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - ytb_network
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 512M
+      reservations:
+        cpus: '0.25'
+        memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # AlertManager 告警管理
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: ytb_alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    environment:
+      # 通过 sed 替换 Webhook URL
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ytb_network
+    resources:
+      limits:
+        cpus: '0.25'
+        memory: 256M
+      reservations:
+        cpus: '0.1'
+        memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    # 动态替换 Webhook URL
+    entrypoint: |
+      sh -c 'if [ -n "$$WEBHOOK_URL" ]; then sed -i "s|\$$WEBHOOK_URL|$$WEBHOOK_URL|g" /etc/alertmanager/alertmanager.yml; fi; /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager'
+
+  # Grafana 仪表板
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ytb_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/datasources.json:/etc/grafana/provisioning/datasources/datasources.json
+      - ./monitoring/grafana/dashboards.json:/etc/grafana/provisioning/dashboards/dashboards.json
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ytb_network
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 512M
+      reservations:
+        cpus: '0.25'
+        memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  grafana_data:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  ytb_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

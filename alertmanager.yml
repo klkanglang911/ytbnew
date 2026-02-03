@@ -1,0 +1,54 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  # 根路由配置
+  receiver: 'wecom-webhook'
+  group_by: ['alertname', 'cluster']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+
+  # 重要告警立即发送
+  routes:
+    - match:
+        severity: critical
+      receiver: 'wecom-webhook'
+      continue: true
+      group_wait: 0s  # 立即发送
+      repeat_interval: 1h
+
+    - match:
+        severity: warning
+      receiver: 'wecom-webhook'
+      group_wait: 30s
+      repeat_interval: 4h
+
+    - match:
+        severity: info
+      receiver: 'wecom-webhook'
+      group_wait: 5m
+      repeat_interval: 12h
+
+receivers:
+  - name: 'wecom-webhook'
+    webhook_configs:
+      - url: '$WEBHOOK_URL'
+        send_resolved: true
+        http_sd_configs: []
+
+inhibit_rules:
+  # 如果实例已停止，抑制其他告警
+  - source_match:
+      severity: 'critical'
+      alertname: 'YouTubeProxyDown'
+    target_match_re:
+      severity: 'warning|info'
+    equal: ['instance']
+
+  # 如果 Redis 不可用，抑制缓存告警
+  - source_match:
+      alertname: 'RedisConnectionFailed'
+    target_match_re:
+      alertname: 'LowCacheHitRate'
+    equal: []

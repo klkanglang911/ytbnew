@@ -1,0 +1,88 @@
+groups:
+  - name: youtube_proxy_alerts
+    interval: 30s
+    rules:
+      # 应用不可用告警
+      - alert: YouTubeProxyDown
+        expr: up{job="youtube_proxy"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🚨 YouTube Proxy 服务不可用"
+          description: "应用已离线超过 2 分钟，请立即检查"
+
+      # 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(ytdlp_request_errors_total[5m])
+            /
+            (rate(ytdlp_requests_total[5m]) + 1)
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ 流解析错误率过高"
+          description: "过去 5 分钟内错误率超过 10%，请检查 YouTube API 是否有变化"
+
+      # Redis 连接失败
+      - alert: RedisConnectionFailed
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🔴 Redis 连接失败"
+          description: "无法连接到 Redis 缓存服务，请检查容器状态"
+
+      # 并发流过多
+      - alert: HighConcurrentStreams
+        expr: active_streams > 8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "📈 并发流接近限制"
+          description: "当前并发流数: {{ $value }} / 10，接近容量限制"
+
+      # 缓存命中率低
+      - alert: LowCacheHitRate
+        expr: cache_hit_rate < 0.3
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "💾 缓存命中率过低"
+          description: "过去 10 分钟缓存命中率: {{ $value }}%，可能需要优化缓存策略"
+
+      # 响应时间过长
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, ytdlp_request_duration_seconds) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⏱️ 响应时间过长"
+          description: "95 分位数响应时间: {{ $value }}s，可能需要增加资源或优化配置"
+
+      # Prometheus 数据库占用过多
+      - alert: PrometheusHighDiskUsage
+        expr: node_filesystem_avail_bytes{mountpoint="/prometheus"} / node_filesystem_size_bytes{mountpoint="/prometheus"} < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "💿 Prometheus 磁盘空间即将用尽"
+          description: "剩余空间不足 20%，请考虑清理或增加存储"
+
+      # 容器重启频繁
+      - alert: ContainerRestartingFrequently
+        expr: rate(container_last_seen{name="ytb_app"}[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "🔄 应用容器频繁重启"
+          description: "检测到应用容器在频繁重启，请检查日志"

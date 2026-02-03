@@ -1,0 +1,52 @@
+# 环境文件
+.env
+.env.local
+.env*.local
+
+# 日志
+logs/
+*.log
+
+# 缓存和临时文件
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# 监控数据
+prometheus/data/
+grafana/data/
+redis/data/
+
+# 备份文件
+backups/
+*.tar.gz
+*.zip
+
+# 热部署文件
+.hot-reload/
+
+# 临时测试文件
+test-*.py
+temp/
+tmp/
