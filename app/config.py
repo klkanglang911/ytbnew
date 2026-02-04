@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     # 应用信息
     APP_NAME: str = "YouTube 直播代理服务"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.1.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "text")
@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # yt-dlp 配置
     YTDLP_TIMEOUT: int = int(os.getenv("YTDLP_TIMEOUT", "30"))
     YTDLP_MAX_RETRIES: int = int(os.getenv("YTDLP_MAX_RETRIES", "3"))
+    YTDLP_PROXY: str = os.getenv("YTDLP_PROXY", "")
 
     # 并发控制
     MAX_CONCURRENT_STREAMS: int = int(os.getenv("MAX_CONCURRENT_STREAMS", "10"))
