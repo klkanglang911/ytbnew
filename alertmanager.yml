@@ -33,7 +33,7 @@ route:
 receivers:
   - name: 'wecom-webhook'
     webhook_configs:
-      - url: '$WEBHOOK_URL'
+      - url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=444ce8c7-2978-4ed6-89d3-4dfc2032eea9'
         send_resolved: true
         http_sd_configs: []
 
