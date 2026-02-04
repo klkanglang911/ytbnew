@@ -6,6 +6,8 @@ import asyncio
 from app.config import settings
 from app.api.routes import router as api_router
 from app.api.health import router as health_router
+from app.api.channels_admin import router as channels_admin_router
+from app.api.channels_admin import set_manager, set_validator
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -49,6 +51,7 @@ app.add_middleware(UTF8EncodingMiddleware)
 # 注册路由
 app.include_router(api_router, prefix="/api")
 app.include_router(health_router)
+app.include_router(channels_admin_router)
 
 # M3U 播放列表特殊处理
 @app.get("/playlist.m3u", response_class=PlainTextResponse)
@@ -73,6 +76,21 @@ async def startup_event():
         # 测试 yt-dlp
         from app.services.ytdlp_service import ytdlp_service
         logger.info("✓ yt-dlp 服务初始化完成")
+
+        # 初始化频道管理器
+        from app.services.channel_manager import ChannelManager
+        from app.services.channel_validator import ChannelValidator
+
+        channel_manager = ChannelManager()
+        logger.info(f"✓ 频道管理器初始化完成，加载了 {len(channel_manager.get_all_channels())} 个频道")
+
+        # 初始化频道验证器
+        channel_validator = ChannelValidator(ytdlp_service)
+        logger.info("✓ 频道验证器初始化完成")
+
+        # 将实例注入到 API 路由
+        set_manager(channel_manager)
+        set_validator(channel_validator)
 
         logger.info("✓ 所有服务初始化完成")
 
@@ -102,3 +120,4 @@ if __name__ == "__main__":
         port=8000,
         log_level=settings.LOG_LEVEL.lower()
     )
+
