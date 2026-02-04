@@ -122,32 +122,42 @@ async def get_m3u_playlist(use_cache: bool = Query(True)):
     获取 M3U 播放列表
 
     格式：可直接导入 VLC
+
+    注：此端点返回已缓存的频道流地址。
+    对于未缓存的频道，先调用 /api/stream/{channel} 来获取并缓存流地址。
     """
     try:
+        import asyncio
+
         m3u_content = "#EXTM3U\n"
 
         for channel in CHANNELS:
             channel_name = channel['name']
 
-            # 获取流地址
-            stream_url = await stream_resolver.get_stream_url(
-                channel['url'],
-                channel_name,
-                use_cache=use_cache
-            )
+            try:
+                # 直接从缓存读取，不主动调用 yt-dlp
+                # 这样避免单个频道卡住导致整个 M3U 无响应
+                cached_data = await cache_service.get_stream_url(channel_name)
 
-            if stream_url:
-                # M3U 格式
-                m3u_content += (
-                    f"#EXTINF:-1 "
-                    f"tvg-id=\"{channel_name}\" "
-                    f"tvg-name=\"{channel_name}\" "
-                    f"logo=\"{channel.get('logo', '')}\" "
-                    f"group-title=\"YouTube\"\n"
-                    f"{stream_url}\n"
-                )
-            else:
-                logger.warning(f"频道离线，跳过: {channel_name}")
+                if cached_data and 'url' in cached_data:
+                    stream_url = cached_data.get('url')
+                    if stream_url:
+                        # M3U 格式
+                        m3u_content += (
+                            f"#EXTINF:-1 "
+                            f"tvg-id=\"{channel_name}\" "
+                            f"tvg-name=\"{channel_name}\" "
+                            f"logo=\"{channel.get('logo', '')}\" "
+                            f"group-title=\"YouTube\"\n"
+                            f"{stream_url}\n"
+                        )
+                    else:
+                        logger.debug(f"频道缓存为空，跳过: {channel_name}")
+                else:
+                    logger.debug(f"频道未缓存，跳过: {channel_name}")
+
+            except Exception as e:
+                logger.warning(f"处理频道时出错，跳过: {channel_name} - {e}")
 
         return m3u_content
 
