@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import asyncio
 from app.config import settings
 from app.api.routes import router as api_router
@@ -8,6 +9,23 @@ from app.api.health import router as health_router
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# UTF-8 编码中间件：确保所有文本响应都明确指定字符集
+class UTF8EncodingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+
+        # 获取当前的 content-type
+        content_type = response.headers.get("content-type", "")
+
+        # 仅在没有字符集信息时添加 charset=utf-8
+        if content_type and "charset" not in content_type:
+            if content_type.startswith("application/json"):
+                response.headers["content-type"] = "application/json; charset=utf-8"
+            elif content_type.startswith("text/"):
+                response.headers["content-type"] = f"{content_type}; charset=utf-8"
+
+        return response
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -17,7 +35,7 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# CORS 中间件
+# 注册中间件（顺序很重要：UTF-8 中间件最后添加）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,6 +43,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(UTF8EncodingMiddleware)
 
 # 注册路由
 app.include_router(api_router, prefix="/api")
